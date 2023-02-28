@@ -22,6 +22,9 @@ class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
         checkPermissions()
 
         mView.btnPush.setOnClickListener {
+            startActivity(Intent(this, PushActivity::class.java))
+        }
+        mView.btnPull.setOnClickListener {
             startActivity(Intent(this, PullActivity::class.java))
         }
     }

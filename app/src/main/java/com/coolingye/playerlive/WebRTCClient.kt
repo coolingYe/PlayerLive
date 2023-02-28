@@ -5,7 +5,6 @@ import android.text.TextUtils
 import com.coolingye.playerlive.Constant.SRS_SERVER_IP
 import com.coolingye.playerlive.service.RestfulCallback
 import com.coolingye.playerlive.service.RetrofitClient
-import com.google.gson.Gson
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
 import org.webrtc.*
@@ -14,7 +13,12 @@ import java.net.NetworkInterface
 import java.net.SocketException
 
 
-class WebRTCClient(private val context: Context, private val localPlayerView: SurfaceViewRenderer, private val netWorkPlayerView: SurfaceViewRenderer ) : SdpObserver {
+class WebRTCClient(
+    private val context: Context,
+    private val localPlayerView: SurfaceViewRenderer,
+    private val netWorkPlayerView: SurfaceViewRenderer,
+    private val isPush: Boolean = false
+) : SdpObserver {
     private lateinit var peerConnection: PeerConnection
     private lateinit var peerConnectionFactory: PeerConnectionFactory
 
@@ -28,6 +32,7 @@ class WebRTCClient(private val context: Context, private val localPlayerView: Su
     private val eglBaseContext = EglBase.create().eglBaseContext
 
     private val loadAddress: String = SRS_SERVER_IP
+
 
     companion object {
         const val VIDEO_TRACK_ID = "ARDAMSv0"
@@ -52,11 +57,19 @@ class WebRTCClient(private val context: Context, private val localPlayerView: Su
 
     private fun initRTC() {
         val rtcConfig = PeerConnection.RTCConfiguration(emptyList())
+        rtcConfig.apply {
+            enableCpuOveruseDetection = false
+            sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+        }
         /*
          <p>For users who wish to send multiple audio/video streams and need to stay interoperable with legacy WebRTC implementations, specify PLAN_B.
          <p>For users who wish to send multiple audio/video streams and/or wish to use the new RtpTransceiver API, specify UNIFIED_PLAN.
          */
         rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+
+        netWorkPlayerView.init(eglBaseContext, null)
+
+
         peerConnection = peerConnectionFactory.createPeerConnection(
             rtcConfig,
             object : PeerConnectionObserver() {
@@ -68,49 +81,91 @@ class WebRTCClient(private val context: Context, private val localPlayerView: Su
                         }
                     }
                 }
+
+                override fun onIceCandidate(iceCandidate: IceCandidate?) {
+                    super.onIceCandidate(iceCandidate)
+                    peerConnection.addIceCandidate(iceCandidate)
+                }
+
+                override fun onIceCandidatesRemoved(array: Array<out IceCandidate>?) {
+                    super.onIceCandidatesRemoved(array)
+                    peerConnection.removeIceCandidates(array)
+                }
+
             })?.apply {
-            addTransceiver(
-                MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
-                RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
-            )
-            addTransceiver(
-                MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
-                RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
-            )
+            if (isPush) {
+                addTransceiver(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
+                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
+                )
+                addTransceiver(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
+                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
+                )
+            } else {
+                addTransceiver(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
+                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
+                )
+                addTransceiver(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
+                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
+                )
+            }
         }!!
 
-//        audioTrack.setEnabled(true)
-//        videoTrack.setEnabled(true)
 
-        peerConnection.addTrack(getVideoTrack())
-        peerConnection.addTrack(getAudioTrack())
+        if (isPush) {
+            getVideoTrack().setEnabled(true)
+            getAudioTrack().setEnabled(true)
+            peerConnection.addTrack(getVideoTrack())
+            peerConnection.addTrack(getAudioTrack())
+        }
 
         localPlayerView.setMirror(true)
         localPlayerView.init(eglBaseContext, null)
         getVideoTrack().addSink(localPlayerView)
 
+
         peerConnection.createOffer(this, MediaConstraints())
     }
 
-    private val pushUrl = "webrtc://%s/live/livestream"
+    private val pullUrl = "webrtc://%s/live/livestream"
 
     private fun connectRTC(desc: String) {
-        val streamUrl: String = String.format(pushUrl, loadAddress)
-        val req = SrsRequestBody(desc, streamUrl, "http://192.168.2.86:1985/rtc/v1/play/", "192.168.30.183")
-        println("pull-json:${Gson().toJson(req)}")
-        RetrofitClient.mService.play(req).subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread()).subscribe(object : RestfulCallback<SrsResponsBody>(){
-                override fun onSuccess(t: SrsResponsBody) {
-                    if (req.sdp?.isNotEmpty() == true) {
-                        setRemoteSdp(req.sdp)
+        val streamUrl: String = String.format(pullUrl, loadAddress)
+        val req = SrsRequestBody(desc, streamUrl)
+        if (isPush) {
+            RetrofitClient.mService.publish(req).subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(object : RestfulCallback<SrsResponsBody>() {
+                    override fun onSuccess(t: SrsResponsBody) {
+                        if (t.code == 0) {
+                            t.sdp?.let { setRemoteSdp(it) }
+                        }
                     }
-                }
 
-                override fun onFailure(e: Throwable?) {
-                    e
-                }
+                    override fun onFailure(e: Throwable?) {
 
-            })
+                    }
+
+                })
+        } else {
+            RetrofitClient.mService.play(req).subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(object : RestfulCallback<SrsResponsBody>() {
+                    override fun onSuccess(t: SrsResponsBody) {
+                        if (t.code == 0) {
+                            t.sdp?.let { setRemoteSdp(it) }
+                        }
+                    }
+
+                    override fun onFailure(e: Throwable?) {
+
+                    }
+
+                })
+        }
 
     }
 
@@ -142,7 +197,7 @@ class WebRTCClient(private val context: Context, private val localPlayerView: Su
         }
     }
 
-    private fun getVideoTrack() : VideoTrack {
+    private fun getVideoTrack(): VideoTrack {
         videoCapture = createVideoCapture()!!
         videoSource = peerConnectionFactory.createVideoSource(videoCapture.isScreencast)
         surfaceTextureHelper = SurfaceTextureHelper.create("surface_texture_thread", eglBaseContext)
@@ -152,7 +207,7 @@ class WebRTCClient(private val context: Context, private val localPlayerView: Su
         return videoTrack
     }
 
-    private fun getAudioTrack() : AudioTrack {
+    private fun getAudioTrack(): AudioTrack {
         audioSource = peerConnectionFactory.createAudioSource(MediaConstraints())
         audioTrack = peerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource)
         return audioTrack

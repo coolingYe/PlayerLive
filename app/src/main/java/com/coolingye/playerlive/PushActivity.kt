@@ -7,7 +7,7 @@ import com.coolingye.playerlive.databinding.ActivityPullBinding
 import kotlinx.coroutines.launch
 import org.webrtc.EglBase
 
-open class PullActivity : AppCompatActivity() {
+class PushActivity :AppCompatActivity() {
 
     private lateinit var mView: ActivityPullBinding
     private lateinit var webRTCClient: WebRTCClient
@@ -16,7 +16,7 @@ open class PullActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         mView = ActivityPullBinding.inflate(layoutInflater)
         setContentView(mView.root)
-        webRTCClient =  WebRTCClient(this, mView.svMe, mView.svAnother)
+        webRTCClient =  WebRTCClient(this, mView.svMe, mView.svAnother, true)
         webRTCClient.execute()
     }
 

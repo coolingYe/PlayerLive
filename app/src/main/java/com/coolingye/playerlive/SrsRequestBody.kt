@@ -9,16 +9,16 @@ data class SrsRequestBody(
      * [PeerConnection.createOffer]返回的sdp
      */
     @JSONField(name = "sdp")
-    val sdp: String? = null,
+    var sdp: String? = null,
     /**
      * 拉取的WebRTC流地址
      */
     @JSONField(name = "streamurl")
-    val streamurl: String? = null,
+    var streamurl: String? = null,
 
     @JSONField(name = "api")
     var api: String? = null,
 
     @JSONField(name = "clientip")
-    val clientip: String? = null
+    var clientip: String? = null
 )
