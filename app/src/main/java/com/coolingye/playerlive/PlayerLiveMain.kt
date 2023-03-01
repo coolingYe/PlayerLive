@@ -12,6 +12,7 @@ class PlayerLiveMain : Application() {
             PeerConnectionFactory.InitializationOptions
                 .builder(applicationContext).createInitializationOptions()
         )
+
         XLog.init(LogLevel.ALL)
     }
 }

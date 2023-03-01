@@ -2,6 +2,7 @@ package com.coolingye.playerlive
 
 import android.content.Context
 import android.text.TextUtils
+import android.widget.Toast
 import com.coolingye.playerlive.Constant.SRS_SERVER_IP
 import com.coolingye.playerlive.service.RestfulCallback
 import com.coolingye.playerlive.service.RetrofitClient
@@ -41,6 +42,10 @@ class WebRTCClient(
 
     fun execute() {
         initPeer()
+        if (isPush) {
+            getVideoTrack()
+            getAudioTrack()
+        }
         initRTC()
     }
 
@@ -48,6 +53,8 @@ class WebRTCClient(
         val options = PeerConnectionFactory.Options()
         val encoderFactory = DefaultVideoEncoderFactory(eglBaseContext, true, true)
         val decoderFactory = DefaultVideoDecoderFactory(eglBaseContext)
+
+
         peerConnectionFactory = PeerConnectionFactory.builder()
             .setOptions(options)
             .setVideoEncoderFactory(encoderFactory)
@@ -61,48 +68,39 @@ class WebRTCClient(
             enableCpuOveruseDetection = false
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
-        /*
-         <p>For users who wish to send multiple audio/video streams and need to stay interoperable with legacy WebRTC implementations, specify PLAN_B.
-         <p>For users who wish to send multiple audio/video streams and/or wish to use the new RtpTransceiver API, specify UNIFIED_PLAN.
-         */
+
         rtcConfig.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
 
         netWorkPlayerView.init(eglBaseContext, null)
 
-
-        peerConnection = peerConnectionFactory.createPeerConnection(
-            rtcConfig,
-            object : PeerConnectionObserver() {
-                override fun onAddStream(mediaStream: MediaStream?) {
-                    super.onAddStream(mediaStream)
-                    mediaStream?.let {
-                        if (it.videoTracks.isNotEmpty()) {
-                            it.videoTracks.first().addSink(netWorkPlayerView)
+        if (isPush) {
+            peerConnection = peerConnectionFactory.createPeerConnection(
+                rtcConfig,
+                PeerConnectionObserver()
+            )?.apply {
+                addTransceiver(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
+                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
+                )
+                addTransceiver(
+                    MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
+                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
+                )
+            }!!
+        } else {
+            peerConnection = peerConnectionFactory.createPeerConnection(
+                rtcConfig,
+                object : PeerConnectionObserver() {
+                    override fun onAddStream(mediaStream: MediaStream?) {
+                        super.onAddStream(mediaStream)
+                        mediaStream?.let {
+                            if (it.videoTracks.isNotEmpty()) {
+                                it.videoTracks.first().addSink(netWorkPlayerView)
+                            }
                         }
                     }
-                }
 
-                override fun onIceCandidate(iceCandidate: IceCandidate?) {
-                    super.onIceCandidate(iceCandidate)
-                    peerConnection.addIceCandidate(iceCandidate)
-                }
-
-                override fun onIceCandidatesRemoved(array: Array<out IceCandidate>?) {
-                    super.onIceCandidatesRemoved(array)
-                    peerConnection.removeIceCandidates(array)
-                }
-
-            })?.apply {
-            if (isPush) {
-                addTransceiver(
-                    MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
-                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
-                )
-                addTransceiver(
-                    MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
-                    RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_ONLY)
-                )
-            } else {
+                })?.apply {
                 addTransceiver(
                     MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,
                     RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
@@ -111,21 +109,20 @@ class WebRTCClient(
                     MediaStreamTrack.MediaType.MEDIA_TYPE_AUDIO,
                     RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
                 )
-            }
-        }!!
+            }!!
+        }
 
 
         if (isPush) {
-            getVideoTrack().setEnabled(true)
-            getAudioTrack().setEnabled(true)
-            peerConnection.addTrack(getVideoTrack())
-            peerConnection.addTrack(getAudioTrack())
+            videoTrack.setEnabled(true)
+            audioTrack.setEnabled(true)
+            peerConnection.addTrack(videoTrack)
+            peerConnection.addTrack(audioTrack)
+
+            localPlayerView.setMirror(true)
+            localPlayerView.init(eglBaseContext, null)
+            videoTrack.addSink(localPlayerView)
         }
-
-        localPlayerView.setMirror(true)
-        localPlayerView.init(eglBaseContext, null)
-        getVideoTrack().addSink(localPlayerView)
-
 
         peerConnection.createOffer(this, MediaConstraints())
     }
@@ -169,6 +166,75 @@ class WebRTCClient(
 
     }
 
+    private fun convertAnswerSdp(offerSdp: String, answerSdp: String?): String {
+        if (answerSdp.isNullOrBlank()) {
+            return ""
+        }
+        val indexOfOfferVideo = offerSdp.indexOf("m=video")
+        val indexOfOfferAudio = offerSdp.indexOf("m=audio")
+        if (indexOfOfferVideo == -1 || indexOfOfferAudio == -1) {
+            return answerSdp
+        }
+        val indexOfAnswerVideo = answerSdp.indexOf("m=video")
+        val indexOfAnswerAudio = answerSdp.indexOf("m=audio")
+        if (indexOfAnswerVideo == -1 || indexOfAnswerAudio == -1) {
+            return answerSdp
+        }
+
+        val isFirstOfferVideo = indexOfOfferVideo < indexOfOfferAudio
+        val isFirstAnswerVideo = indexOfAnswerVideo < indexOfAnswerAudio
+        return if (isFirstOfferVideo == isFirstAnswerVideo) {
+            //顺序一致
+            answerSdp
+        } else {
+            //需要调换顺序
+            buildString {
+                append(answerSdp.substring(0, indexOfAnswerVideo.coerceAtMost(indexOfAnswerAudio)))
+                append(
+                    answerSdp.substring(
+                        indexOfAnswerVideo.coerceAtLeast(indexOfOfferVideo),
+                        answerSdp.length
+                    )
+                )
+                append(
+                    answerSdp.substring(
+                        indexOfAnswerVideo.coerceAtMost(indexOfAnswerAudio),
+                        indexOfAnswerVideo.coerceAtLeast(indexOfOfferVideo)
+                    )
+                )
+            }
+        }
+    }
+
+    private fun createAudioConstraints(): MediaConstraints? {
+        val audioConstraints = MediaConstraints()
+        audioConstraints.mandatory.add(
+            MediaConstraints.KeyValuePair(
+                "googEchoCancellation",
+                "true"
+            )
+        )
+        audioConstraints.mandatory.add(
+            MediaConstraints.KeyValuePair(
+                "googAutoGainControl",
+                "false"
+            )
+        )
+        audioConstraints.mandatory.add(
+            MediaConstraints.KeyValuePair(
+                "googHighpassFilter",
+                "false"
+            )
+        )
+        audioConstraints.mandatory.add(
+            MediaConstraints.KeyValuePair(
+                "googNoiseSuppression",
+                "true"
+            )
+        )
+        return audioConstraints
+    }
+
     fun getIpAddressString(): String? {
         try {
             val enNetI = NetworkInterface
@@ -200,7 +266,7 @@ class WebRTCClient(
     private fun getVideoTrack(): VideoTrack {
         videoCapture = createVideoCapture()!!
         videoSource = peerConnectionFactory.createVideoSource(videoCapture.isScreencast)
-        surfaceTextureHelper = SurfaceTextureHelper.create("surface_texture_thread", eglBaseContext)
+        surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", eglBaseContext)
         videoCapture.initialize(surfaceTextureHelper, context, videoSource.capturerObserver)
         videoCapture.startCapture(640, 480, 30)
         videoTrack = peerConnectionFactory.createVideoTrack(VIDEO_TRACK_ID, videoSource)
@@ -208,7 +274,7 @@ class WebRTCClient(
     }
 
     private fun getAudioTrack(): AudioTrack {
-        audioSource = peerConnectionFactory.createAudioSource(MediaConstraints())
+        audioSource = peerConnectionFactory.createAudioSource(createAudioConstraints())
         audioTrack = peerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource)
         return audioTrack
     }
@@ -269,8 +335,12 @@ class WebRTCClient(
     }
 
     fun destroy() {
-        videoCapture.dispose()
-        surfaceTextureHelper.dispose()
+        localPlayerView.release()
+        netWorkPlayerView.release()
+        if (isPush) {
+            videoCapture.dispose()
+            videoTrack.dispose()
+        }
         peerConnection.dispose()
         peerConnectionFactory.dispose()
     }

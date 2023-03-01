@@ -22,8 +22,6 @@ open class PullActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        mView.svMe.release()
-        mView.svAnother.release()
         webRTCClient.destroy()
     }
 }
