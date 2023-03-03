@@ -2,10 +2,8 @@ package com.coolingye.playerlive
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import com.coolingye.playerlive.databinding.ActivityPullBinding
-import kotlinx.coroutines.launch
-import org.webrtc.EglBase
+import com.coolingye.playerlive.webrtc.WebRTCClient
 
 open class PullActivity : AppCompatActivity() {
 

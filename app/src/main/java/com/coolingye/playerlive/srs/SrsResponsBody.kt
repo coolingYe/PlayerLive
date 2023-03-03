@@ -1,4 +1,4 @@
-package com.coolingye.playerlive
+package com.coolingye.playerlive.srs
 
 
 import com.alibaba.fastjson.annotation.JSONField

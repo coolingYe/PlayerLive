@@ -1,10 +1,10 @@
-package com.coolingye.playerlive
+package com.coolingye.playerlive.service
 
 object Constant {
     /**
      * SRS服务器IP
      */
-    const val SRS_SERVER_IP = "192.168.2.86"
+    const val SRS_SERVER_IP = "192.168.2.244"
 
     /**
      * SRS服务http请求端口，1985

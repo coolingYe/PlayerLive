@@ -1,4 +1,4 @@
-package com.coolingye.playerlive
+package com.coolingye.playerlive.webrtc
 
 import com.elvishew.xlog.XLog
 import org.webrtc.*

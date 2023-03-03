@@ -1,8 +1,6 @@
-package com.coolingye.playerlive.service
+package com.coolingye.playerlive.srs
 
 
-import com.coolingye.playerlive.SrsRequestBody
-import com.coolingye.playerlive.SrsResponsBody
 import io.reactivex.Observable
 
 import retrofit2.http.Body
@@ -14,7 +12,7 @@ import retrofit2.http.POST
  * @date    2021/8/19 12:38
  * @email   714081644@qq.com
  */
-interface ApiService {
+interface SrsApiService {
 
     @POST("/rtc/v1/play/")
     fun play(@Body body: SrsRequestBody): Observable<SrsResponsBody>

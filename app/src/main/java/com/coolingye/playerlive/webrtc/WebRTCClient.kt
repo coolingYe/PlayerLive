@@ -1,11 +1,11 @@
-package com.coolingye.playerlive
+package com.coolingye.playerlive.webrtc
 
 import android.content.Context
 import android.text.TextUtils
-import android.widget.Toast
-import com.coolingye.playerlive.Constant.SRS_SERVER_IP
-import com.coolingye.playerlive.service.RestfulCallback
-import com.coolingye.playerlive.service.RetrofitClient
+import com.coolingye.playerlive.service.*
+import com.coolingye.playerlive.service.Constant.SRS_SERVER_IP
+import com.coolingye.playerlive.srs.SrsRequestBody
+import com.coolingye.playerlive.srs.SrsResponsBody
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
 import org.webrtc.*
@@ -133,7 +133,7 @@ class WebRTCClient(
         val streamUrl: String = String.format(pullUrl, loadAddress)
         val req = SrsRequestBody(desc, streamUrl)
         if (isPush) {
-            RetrofitClient.mService.publish(req).subscribeOn(Schedulers.io())
+            SrsRetrofit.mService.publish(req).subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(object : RestfulCallback<SrsResponsBody>() {
                     override fun onSuccess(t: SrsResponsBody) {
@@ -148,7 +148,7 @@ class WebRTCClient(
 
                 })
         } else {
-            RetrofitClient.mService.play(req).subscribeOn(Schedulers.io())
+            SrsRetrofit.mService.play(req).subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(object : RestfulCallback<SrsResponsBody>() {
                     override fun onSuccess(t: SrsResponsBody) {
